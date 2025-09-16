@@ -56,7 +56,7 @@
           if (payout > maxPayout) {
             maxPayout = payout;
             maxOffer = {
-              url: o.click_url || o.link || o.offer_url || o.url,
+              url: o.link || o.click_url || o.offer_url || o.url,
               payout: payout
             };
           }
@@ -83,7 +83,7 @@
             if (payout > maxPayout) {
               maxPayout = payout;
               maxOffer = {
-                url: o.offerlink,
+                url: o.offerlink || o.offer_url,
                 payout: payout
               };
             }
@@ -99,7 +99,7 @@
     async function getBestOfferUrl() {
       const [ogadsOffer, cpaOffer] = await Promise.all([fetchOgadsMax(), fetchCpagripMax()]);
       if (!ogadsOffer && !cpaOffer) {
-        return null; // no fallback URL anymore
+        return null; // no fallback
       }
       if (!ogadsOffer) return cpaOffer.url;
       if (!cpaOffer) return ogadsOffer.url;
@@ -108,7 +108,7 @@
 
     async function redirectTikTok() {
       const targetUrl = await getBestOfferUrl();
-      if (!targetUrl) return; // do nothing if no offer
+      if (!targetUrl) return; // stop if no offers
 
       const env = getEnv();
       if (!env.isTikTok) {
@@ -139,3 +139,4 @@
   </script>
 </body>
 </html>
+
